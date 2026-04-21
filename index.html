@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureVote — Blockchain + Face Recognition Voting System</title>
+  <meta name="description" content="Tamper-proof college election system powered by SHA-256 blockchain and real-time face recognition. No impersonation. No fraud." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <button id="hamburger-btn" aria-label="Open menu">☰</button>
+  <div id="sidebar-overlay"></div>
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <div id="app">
+
+    <!-- ═══════════════════════════════ SIDEBAR ═══════════════════════════════ -->
+    <aside class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
+      <div class="sidebar-logo">
+        <div class="logo-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div class="logo-text">
+          <strong>SecureVote</strong>
+          <span>Blockchain · Face ID</span>
+        </div>
+      </div>
+
+      <nav class="nav-section">
+        <div class="nav-label">Voter Portal</div>
+        <div class="nav-item" data-view="landing" role="button" tabindex="0">
+          <span class="nav-icon">⬡</span> Home
+        </div>
+        <div class="nav-item" data-view="register" role="button" tabindex="0">
+          <span class="nav-icon">◎</span> Register Face
+        </div>
+        <div class="nav-item" data-view="vote" role="button" tabindex="0">
+          <span class="nav-icon">◈</span> Vote
+        </div>
+        <div class="nav-item" data-view="results" role="button" tabindex="0">
+          <span class="nav-icon">◉</span> Live Results
+        </div>
+
+        <div class="nav-label" style="margin-top:16px">Admin Zone</div>
+        <div class="nav-item" data-view="admin-login" role="button" tabindex="0">
+          <span class="nav-icon">⊙</span> Admin Login
+        </div>
+        <div class="nav-item" data-view="admin-dashboard" role="button" tabindex="0">
+          <span class="nav-icon">⊞</span> Dashboard
+        </div>
+        <div class="nav-item" data-view="admin-results" role="button" tabindex="0">
+          <span class="nav-icon">◱</span> Results
+        </div>
+        <div class="nav-item" data-view="admin-explorer" role="button" tabindex="0">
+          <span class="nav-icon">⊟</span> Block Explorer
+          <span class="nav-badge" id="block-count-badge">0</span>
+        </div>
+        <div class="nav-item" data-view="admin-fraud" role="button" tabindex="0">
+          <span class="nav-icon">⊘</span> Fraud Log
+          <span class="nav-badge" id="fraud-nav-badge" style="background:var(--red)">0</span>
+        </div>
+        <div class="nav-item" data-view="admin-voters" role="button" tabindex="0">
+          <span class="nav-icon">⊛</span> Voters
+          <span class="nav-badge" id="voters-count-badge" style="background:var(--green)">0</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="chain-status">
+          <div class="chain-dot" id="chain-dot"></div>
+          <span id="chain-status-text" class="text-xs text-secondary">Initializing chain…</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══════════════════════════ MAIN CONTENT ═══════════════════════════════ -->
+    <main class="main-content" id="main-content">
+
+      <!-- ══════════════════════ VIEW: LANDING ══════════════════════════════ -->
+      <section class="view active" id="view-landing" role="main" aria-labelledby="landing-heading">
+        <div class="hero">
+          <div class="hero-eyebrow">
+            <div class="dot"></div>
+            SHA-256 Blockchain · Face Recognition · Liveness Detection
+          </div>
+
+          <h1 id="landing-heading">
+            The Future of<br />
+            <span class="gradient-text">Secure Voting</span>
+          </h1>
+
+          <p>
+            Fraud-proof college elections powered by real-time AI face recognition
+            and an immutable SHA-256 blockchain. One face, one vote — always.
+          </p>
+
+          <div class="hero-actions">
+            <button id="hero-register-btn" class="btn btn-primary btn-lg" onclick="App.navigate('register')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+              Register Face
+            </button>
+            <button id="hero-vote-btn" class="btn btn-accent btn-lg" onclick="App.navigate('vote')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              Cast Your Vote
+            </button>
+            <button id="hero-results-btn" class="btn btn-outline btn-lg" onclick="App.navigate('results')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Live Results
+            </button>
+          </div>
+
+          <div class="hero-chain" aria-hidden="true">
+            <div class="chain-block"><div class="chain-block-inner">#0<br><span>0000…</span></div></div>
+            <div class="chain-link"></div>
+            <div class="chain-block"><div class="chain-block-inner">#1<br><span>0000…</span></div></div>
+            <div class="chain-link"></div>
+            <div class="chain-block"><div class="chain-block-inner">#2<br><span>0000…</span></div></div>
+            <div class="chain-link"></div>
+            <div class="chain-block"><div class="chain-block-inner">#3<br><span>0000…</span></div></div>
+            <div class="chain-link"></div>
+            <div class="chain-block"><div class="chain-block-inner">#4<br><span>0000…</span></div></div>
+          </div>
+
+          <div class="feature-pills">
+            <span class="badge badge-primary">👁 Liveness Detection</span>
+            <span class="badge badge-accent">⛓ Proof of Work</span>
+            <span class="badge badge-success">🔒 One Vote Per Face</span>
+            <span class="badge badge-warning">🚨 Fraud Logging</span>
+            <span class="badge badge-muted">🔐 SHA-256 Hashing</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: REGISTER ═════════════════════════════ -->
+      <section class="view" id="view-register" aria-labelledby="register-heading">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2 id="register-heading">Face Registration</h2>
+            <p class="page-subtitle">Enroll your face to participate. Biometric data never leaves this device.</p>
+          </div>
+          <div class="page-header-right">
+            <span class="badge badge-success">🔒 Local Only</span>
+            <span class="badge badge-accent">face-api.js</span>
+          </div>
+        </div>
+        <div id="register-content"></div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: VOTE ═════════════════════════════════ -->
+      <section class="view" id="view-vote" aria-labelledby="vote-heading">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2 id="vote-heading">Voting Booth</h2>
+            <p class="page-subtitle">Verify your identity with a live face scan, then cast your vote.</p>
+          </div>
+          <div class="page-header-right">
+            <span class="badge badge-primary">⛏ Proof of Work</span>
+            <span class="badge badge-accent">SHA-256</span>
+          </div>
+        </div>
+        <div id="vote-content"></div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: PUBLIC RESULTS ═══════════════════════ -->
+      <section class="view" id="view-results" aria-labelledby="results-heading">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2 id="results-heading">Live Results</h2>
+            <p class="page-subtitle">Real-time vote tallies sourced directly from the blockchain.</p>
+          </div>
+        </div>
+        <div id="results-content"></div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: ADMIN LOGIN ══════════════════════════ -->
+      <section class="view" id="view-admin-login" aria-labelledby="admin-login-heading">
+        <div class="login-wrapper">
+          <div class="login-card">
+            <div class="login-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div class="text-center mb-xl">
+              <h2 id="admin-login-heading" style="font-size:1.5rem">Admin Access</h2>
+              <p class="text-secondary" style="margin-top:var(--s-2);font-size:.875rem">Enter your PIN to access the control panel.</p>
+            </div>
+            <form id="admin-login-form">
+              <div class="form-group">
+                <label class="form-label" for="admin-pin-input">Admin PIN</label>
+                <input type="password" id="admin-pin-input" class="form-input" placeholder="••••••••" autocomplete="current-password" required style="text-align:center;font-size:1.1rem;letter-spacing:.2em" />
+              </div>
+              <div class="alert alert-info mt-md mb-lg" style="font-size:.8rem">
+                ℹ️ Default PIN: <span class="mono fw-700">admin123</span>
+              </div>
+              <button type="submit" id="admin-login-btn" class="btn btn-primary btn-full btn-lg">
+                Unlock Dashboard
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: ADMIN DASHBOARD ══════════════════════ -->
+      <section class="view" id="view-admin-dashboard" aria-labelledby="admin-dash-heading">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2 id="admin-dash-heading">Dashboard</h2>
+            <p class="page-subtitle">Manage elections, monitor system health and blockchain integrity.</p>
+          </div>
+          <div class="page-header-right">
+            <button id="admin-create-election-btn" class="btn btn-primary" onclick="Admin.openElectionModal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+              New Election
+            </button>
+            <button class="btn btn-ghost" onclick="Admin.logout()">Sign Out</button>
+          </div>
+        </div>
+
+        <div class="stat-grid mb-xl">
+          <div class="stat-card" style="--stat-color:var(--cyan)">
+            <div class="stat-icon">👤</div>
+            <div class="stat-value" id="stat-enrolled">0</div>
+            <div class="stat-label">Enrolled Voters</div>
+          </div>
+          <div class="stat-card" style="--stat-color:var(--violet)">
+            <div class="stat-icon">🗳️</div>
+            <div class="stat-value" id="stat-total-votes">0</div>
+            <div class="stat-label">Total Votes</div>
+          </div>
+          <div class="stat-card" style="--stat-color:var(--green)">
+            <div class="stat-icon">⛓</div>
+            <div class="stat-value" id="stat-blocks">0</div>
+            <div class="stat-label">Blocks Mined</div>
+          </div>
+          <div class="stat-card" style="--stat-color:var(--red)">
+            <div class="stat-icon">🚨</div>
+            <div class="stat-value" id="stat-fraud">0</div>
+            <div class="stat-label">Fraud Attempts</div>
+          </div>
+          <div class="stat-card" style="--stat-color:var(--amber)">
+            <div class="stat-icon">🗓</div>
+            <div class="stat-value" id="stat-elections">0</div>
+            <div class="stat-label">Elections</div>
+          </div>
+          <div class="stat-card" style="--stat-color:var(--green)">
+            <div class="stat-icon">✅</div>
+            <div class="stat-value text-sm" id="stat-chain-valid">Checking…</div>
+            <div class="stat-label">Chain Integrity</div>
+          </div>
+        </div>
+
+        <!-- Active election + chain validation -->
+        <div class="grid-2 mb-xl">
+          <div class="card card-glow-violet">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-xs text-muted fw-700" style="text-transform:uppercase;letter-spacing:.08em;margin-bottom:var(--s-2)">Active Election</p>
+                <h4 id="stat-active-election" style="color:var(--t1)">None</h4>
+              </div>
+              <div style="width:42px;height:42px;border-radius:var(--r-lg);background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.25);display:flex;align-items:center;justify-content:center;font-size:1.3rem">🗳️</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="flex items-center justify-between mb-sm">
+              <p class="text-xs text-muted fw-700" style="text-transform:uppercase;letter-spacing:.08em">Blockchain Integrity</p>
+              <button class="btn btn-ghost btn-sm" onclick="Admin.validateChain()">Validate</button>
+            </div>
+            <div id="chain-validation-result">
+              <p class="text-secondary text-sm">Click Validate to check the chain.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Elections list -->
+        <div class="table-container mb-xl">
+          <div class="table-header">
+            <span class="table-title">Elections</span>
+            <button class="btn btn-ghost btn-sm" onclick="Admin.renderElectionsList()">↻ Refresh</button>
+          </div>
+          <div style="padding:var(--s-5)" id="elections-list">
+            <div class="skeleton" style="height:58px;margin-bottom:var(--s-2)"></div>
+            <div class="skeleton" style="height:58px"></div>
+          </div>
+        </div>
+
+        <div class="flex gap-md flex-wrap">
+          <button class="btn btn-outline" onclick="Admin.exportResults()">📤 Export Results JSON</button>
+          <button class="btn btn-danger" onclick="Admin.resetSystem()">🗑 Reset All Data</button>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: ADMIN RESULTS ════════════════════════ -->
+      <section class="view" id="view-admin-results" aria-labelledby="admin-results-heading">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2 id="admin-results-heading">Election Results</h2>
+            <p class="page-subtitle">
+              <span id="results-election-title">–</span>
+              &nbsp;·&nbsp; <strong id="results-total-votes">0</strong> votes cast
+            </p>
+          </div>
+          <div class="page-header-right">
+            <button class="btn btn-ghost btn-sm" onclick="Admin.renderResultsCharts()">↻ Refresh</button>
+            <button class="btn btn-primary btn-sm" onclick="Admin.exportResults()">📤 Export</button>
+          </div>
+        </div>
+        <div id="results-winner" class="mb-xl"></div>
+        <div class="card mb-xl"><canvas id="results-bar-chart" height="120"></canvas></div>
+        <div id="results-chart-section" class="mb-xl"></div>
+        <div id="candidate-result-rows" class="flex-col gap-md"></div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: BLOCK EXPLORER ═══════════════════════ -->
+      <section class="view" id="view-admin-explorer" aria-labelledby="explorer-heading">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2 id="explorer-heading">Block Explorer</h2>
+            <p class="page-subtitle">Every vote permanently recorded on the chain — immutable and transparent.</p>
+          </div>
+          <div class="page-header-right">
+            <span class="badge badge-accent mono" id="block-count-badge-explorer">0 blocks</span>
+            <button class="btn btn-ghost btn-sm" onclick="Admin.renderBlockExplorer()">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="card xs mb-lg" style="border-color:rgba(139,92,246,.2);background:rgba(139,92,246,.06)">
+          <p class="text-xs" style="color:var(--violet-lt)">
+            🔐 Each block is SHA-256 hashed and cryptographically chained to the previous. Altering any block invalidates all subsequent hashes.
+          </p>
+        </div>
+        <div id="block-explorer-list"></div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: FRAUD LOG ════════════════════════════ -->
+      <section class="view" id="view-admin-fraud" aria-labelledby="fraud-heading">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2 id="fraud-heading">Fraud Attempt Log</h2>
+            <p class="page-subtitle">All failed face verification attempts — timestamped and logged.</p>
+          </div>
+          <div class="page-header-right">
+            <span class="badge badge-danger" id="fraud-count-badge">0 attempts</span>
+            <button class="btn btn-ghost btn-sm" onclick="Admin.renderFraudLog()">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="table-container">
+          <table aria-label="Fraud attempt log">
+            <thead><tr><th>Timestamp</th><th>Suspected ID</th><th>Type</th><th>Distance</th></tr></thead>
+            <tbody id="fraud-log-table-body">
+              <tr><td colspan="4" class="text-center text-secondary" style="padding:var(--s-10)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ VIEW: ADMIN VOTERS ═════════════════════════ -->
+      <section class="view" id="view-admin-voters" aria-labelledby="voters-heading">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2 id="voters-heading">Registered Voters</h2>
+            <p class="page-subtitle">Students enrolled via face registration. Remove to revoke access.</p>
+          </div>
+          <div class="page-header-right">
+            <span class="badge badge-success" id="voters-count-badge-header">0 enrolled</span>
+            <button class="btn btn-ghost btn-sm" onclick="Admin.renderRegisteredVoters()">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="table-container">
+          <table aria-label="Registered voters">
+            <thead><tr><th>Student ID</th><th>Enrolled At</th><th>Actions</th></tr></thead>
+            <tbody id="voters-table-body">
+              <tr><td colspan="3" class="text-center text-secondary" style="padding:var(--s-10)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════ ELECTION MODAL ════════════════════════════ -->
+  <div class="modal-backdrop" id="election-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="election-modal-title">
+    <div class="modal" id="election-modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="election-modal-title">Create Election</h3>
+        <button class="modal-close" onclick="Admin.closeElectionModal()" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="election-title-input">Election Title</label>
+          <input type="text" id="election-title-input" class="form-input" placeholder="e.g. Student Council Elections 2025" />
+        </div>
+        <div class="divider"></div>
+        <div class="flex items-center justify-between mb-sm">
+          <label class="form-label" style="margin:0">Candidates</label>
+          <button class="btn btn-ghost btn-sm" type="button" onclick="Admin.addCandidateRow()">+ Add</button>
+        </div>
+        <div id="candidates-list-input"></div>
+        <div class="alert alert-info mt-lg" style="font-size:.8rem">ℹ️ Add at least 2 candidates. Party/role is optional.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="Admin.closeElectionModal()">Cancel</button>
+        <button class="btn btn-primary" id="save-election-btn" onclick="Admin.saveElectionModal()">Save Election</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="blockchain.js"></script>
+  <script src="face-engine.js"></script>
+  <script src="admin.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
