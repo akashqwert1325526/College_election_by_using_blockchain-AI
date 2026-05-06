@@ -22,8 +22,14 @@ const Admin = (() => {
   function saveElections(elections) {
     localStorage.setItem(ELECTIONS_KEY, JSON.stringify(elections));
   }
+  function getActiveElections() {
+    return loadElections().filter(e => e.status === 'active');
+  }
   function getActiveElection() {
-    return loadElections().find(e => e.status === 'active') || null;
+    return getActiveElections()[0] || null;
+  }
+  function getElectionById(id) {
+    return loadElections().find(e => e.id === id) || null;
   }
 
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -74,11 +80,11 @@ const Admin = (() => {
 
   function renderStats() {
     const elections = loadElections();
-    const active    = getActiveElection();
+    const activeElections = getActiveElections();
     const enrolled  = window.FaceEngine.getEnrolledCount();
     const blocks    = window.VoteChain.length;
-    const totalVotes = active
-      ? window.VoteChain.getTotalVotes(active.id)
+    const totalVotes = activeElections.length
+      ? activeElections.reduce((s, e) => s + window.VoteChain.getTotalVotes(e.id), 0)
       : elections.reduce((s, e) => s + window.VoteChain.getTotalVotes(e.id), 0);
     const fraudCount = window.FaceEngine.fraudLog.length;
 
@@ -87,7 +93,11 @@ const Admin = (() => {
     _set('stat-blocks',     blocks);
     _set('stat-fraud',      fraudCount);
     _set('stat-elections',  elections.length);
-    _set('stat-active-election', active ? active.title : 'None');
+    _set('stat-active-election', activeElections.length === 1
+      ? activeElections[0].title
+      : activeElections.length > 1
+        ? `${activeElections.length} active elections`
+        : 'None');
 
     // Chain validity
     window.VoteChain.isChainValid().then(result => {
@@ -219,18 +229,16 @@ const Admin = (() => {
 
   function activateElection(id) {
     const elections = loadElections();
-    // Deactivate any current active
-    elections.forEach(e => { if (e.status === 'active') e.status = 'ended'; });
     const el = elections.find(e => e.id === id);
     if (el) {
       el.status = 'active';
       el.activatedAt = new Date().toISOString();
+      saveElections(elections);
+      renderElectionsList();
+      App.toast('Election Active', `"${el.title}" is now live!`, 'success');
+      // Update voter view
+      if (typeof renderVoterView === 'function') renderVoterView();
     }
-    saveElections(elections);
-    renderElectionsList();
-    App.toast('Election Active', `"${el?.title}" is now live!`, 'success');
-    // Update voter view
-    if (typeof renderVoterView === 'function') renderVoterView();
   }
 
   function endElection(id) {
@@ -427,19 +435,74 @@ const Admin = (() => {
     const container = document.getElementById('voters-table-body');
     if (!container) return;
     const students = window.FaceEngine.getAllStudents();
+    let duplicateGroups = [];
+    let auditError = null;
+    try {
+      duplicateGroups = window.FaceEngine.getDuplicateFaceGroups();
+    } catch (err) {
+      auditError = err;
+      console.error('Duplicate voter audit failed:', err);
+    }
+    const duplicateIds = new Set(duplicateGroups.flat());
 
     _set('voters-count-badge', students.length);
+    _set('voter-summary-total', students.length);
+    _set('voter-summary-duplicates', duplicateGroups.length);
+    _set('voter-summary-status', auditError ? 'Audit Error' : duplicateGroups.length ? 'Review Needed' : 'Clear');
+    _set('voter-summary-updated', `Updated ${new Date().toLocaleTimeString()}`);
+    _set('voters-count-badge-header', duplicateGroups.length
+      ? `${students.length} enrolled • ${duplicateGroups.length} duplicate face group${duplicateGroups.length !== 1 ? 's' : ''}`
+      : `${students.length} enrolled`);
 
     if (!students.length) {
-      container.innerHTML = `<tr><td colspan="3" class="text-center text-secondary" style="padding:var(--sp-xl)">
-        No students registered yet.
+      container.innerHTML = `<tr><td colspan="4">
+        <div class="voters-empty">
+          <div class="voters-empty-icon">ID</div>
+          <strong>No registered voters</strong>
+          <span>Enrolled students will appear here after face registration.</span>
+        </div>
       </td></tr>`;
       return;
     }
 
-    container.innerHTML = students.map(s => `
+    const auditWarning = auditError ? `
       <tr>
-        <td><span class="mono text-xs">${_esc(s.studentId)}</span></td>
+        <td colspan="4">
+          <div class="alert alert-warning">
+            Could not verify duplicate faces right now. Registered voters are shown below.
+          </div>
+        </td>
+      </tr>
+    ` : '';
+
+    const duplicateWarning = duplicateGroups.length ? `
+      <tr>
+        <td colspan="4">
+          <div class="alert alert-danger">
+            Duplicate face records found: ${duplicateGroups
+              .map(group => group.map(id => `<span class="mono text-xs">${_esc(id)}</span>`).join(' / '))
+              .join(', ')}. Remove duplicate voter records before voting.
+          </div>
+        </td>
+      </tr>
+    ` : '';
+
+    container.innerHTML = auditWarning + duplicateWarning + students.map(s => `
+      <tr>
+        <td>
+          <div class="voter-id-cell">
+            <span class="voter-avatar">${_esc(s.studentId).slice(0, 2).toUpperCase()}</span>
+            <div>
+              <span class="mono text-xs voter-id">${_esc(s.studentId)}</span>
+              <span class="text-xs text-muted">Face descriptor stored locally</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          ${duplicateIds.has(s.studentId)
+            ? '<span class="badge badge-danger">Duplicate Face</span>'
+            : '<span class="badge badge-success">Verified Unique</span>'}
+        </td>
         <td>${new Date(s.enrolledAt).toLocaleString()}</td>
         <td>
           <button class="btn btn-danger btn-sm" onclick="Admin.removeVoter('${_esc(s.studentId)}')">Remove</button>
@@ -548,7 +611,9 @@ const Admin = (() => {
     removeVoter,
     logout,
     isAuthenticated,
+    getActiveElections,
     getActiveElection,
+    getElectionById,
     loadElections,
   };
 })();

@@ -14,6 +14,13 @@
 </head>
 <body>
 
+  <div class="ambient-bg" aria-hidden="true">
+    <div class="aurora aurora-one"></div>
+    <div class="aurora aurora-two"></div>
+    <div class="aurora aurora-three"></div>
+    <div class="particle-field"></div>
+  </div>
+
   <button id="hamburger-btn" aria-label="Open menu">☰</button>
   <div id="sidebar-overlay"></div>
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
@@ -100,6 +107,25 @@
             and an immutable SHA-256 blockchain. One face, one vote — always.
           </p>
 
+          <div class="hero-live-strip" aria-label="Live system metrics">
+            <div>
+              <span>Total Voters</span>
+              <strong id="hero-stat-voters">0</strong>
+            </div>
+            <div>
+              <span>Votes Cast</span>
+              <strong id="hero-stat-votes">0</strong>
+            </div>
+            <div>
+              <span>Blocks Mined</span>
+              <strong id="hero-stat-blocks">0</strong>
+            </div>
+            <div>
+              <span>Fraud Stops</span>
+              <strong id="hero-stat-fraud">0</strong>
+            </div>
+          </div>
+
           <div class="hero-actions">
             <button id="hero-register-btn" class="btn btn-primary btn-lg" onclick="App.navigate('register')">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
@@ -125,6 +151,13 @@
             <div class="chain-block"><div class="chain-block-inner">#3<br><span>0000…</span></div></div>
             <div class="chain-link"></div>
             <div class="chain-block"><div class="chain-block-inner">#4<br><span>0000…</span></div></div>
+          </div>
+
+          <div class="blockchain-ticker" aria-hidden="true">
+            <span>mining block</span>
+            <code id="hero-chain-hash">0000a4f9c21e...</code>
+            <span>face verified</span>
+            <code>proof-of-work active</code>
           </div>
 
           <div class="feature-pills">
@@ -369,11 +402,30 @@
             <button class="btn btn-ghost btn-sm" onclick="Admin.renderRegisteredVoters()">↻ Refresh</button>
           </div>
         </div>
-        <div class="table-container">
+        <div class="voters-overview" aria-label="Voter registration summary">
+          <div class="voter-metric">
+            <span class="voter-metric-label">Enrolled</span>
+            <strong id="voter-summary-total">0</strong>
+          </div>
+          <div class="voter-metric">
+            <span class="voter-metric-label">Duplicate Groups</span>
+            <strong id="voter-summary-duplicates">0</strong>
+          </div>
+          <div class="voter-metric">
+            <span class="voter-metric-label">Review Status</span>
+            <strong id="voter-summary-status">Clear</strong>
+          </div>
+        </div>
+
+        <div class="table-container voters-table">
+          <div class="table-header">
+            <span class="table-title">Face Enrollment Registry</span>
+            <span class="text-xs text-muted" id="voter-summary-updated">Awaiting refresh</span>
+          </div>
           <table aria-label="Registered voters">
-            <thead><tr><th>Student ID</th><th>Enrolled At</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Student ID</th><th>Status</th><th>Enrolled At</th><th>Actions</th></tr></thead>
             <tbody id="voters-table-body">
-              <tr><td colspan="3" class="text-center text-secondary" style="padding:var(--s-10)">Loading…</td></tr>
+              <tr><td colspan="4" class="text-center text-secondary" style="padding:var(--s-10)">Loading...</td></tr>
             </tbody>
           </table>
         </div>

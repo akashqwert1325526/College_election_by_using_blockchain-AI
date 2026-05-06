@@ -186,6 +186,8 @@ const App = (() => {
   }
 
   let _enrollActive = false;
+  let _selectedActiveElectionId = null;
+
   async function startEnrollment() {
     const studentId = document.getElementById('reg-student-id')?.value.trim();
     if (!studentId) { toast('Required', 'Enter your Student ID first.', 'warning'); return; }
@@ -243,6 +245,7 @@ const App = (() => {
       setGuideState('success');
       document.getElementById('reg-cam-status').textContent = '✓ Face enrolled successfully!';
       toast('Enrolled!', `${studentId} registered. You can now vote.`, 'success');
+      updateHeroStats();
 
       const statusMsg = document.getElementById('enroll-status-msg');
       if (statusMsg) {
@@ -259,6 +262,9 @@ const App = (() => {
       setGuideState('fail');
       const msg = err.message === 'ENROLLMENT_TIMEOUT' ? 'Could not detect face — check lighting.' :
                   err.message === 'ALREADY_ENROLLED'   ? 'Already enrolled.'                        :
+                  err.message === 'LIVENESS_FAILED'    ? 'Face verification failed. Please face the camera clearly and try again.' :
+                  err.message === 'FACE_ALREADY_ENROLLED'
+                    ? `This face is already registered as ${err.studentId || 'another student'}.` :
                   err.message;
       toast('Enrollment Failed', msg, 'error');
       const statusMsg = document.getElementById('enroll-status-msg');
@@ -296,9 +302,9 @@ const App = (() => {
   function renderVoteView() {
     const content = document.getElementById('vote-content');
     if (!content) return;
-    const active = Admin.getActiveElection();
+    const activeElections = Admin.getActiveElections();
 
-    if (!active) {
+    if (!activeElections.length) {
       content.innerHTML = `<div class="card text-center" style="padding:var(--sp-3xl)">
         <div style="font-size:3rem;margin-bottom:var(--sp-md)">🗳️</div>
         <h3>No Active Election</h3>
@@ -307,7 +313,24 @@ const App = (() => {
       return;
     }
 
-    // Phase 1: Face Verification
+    if (!_selectedActiveElectionId || !activeElections.some(e => e.id === _selectedActiveElectionId)) {
+      _selectedActiveElectionId = activeElections[0].id;
+    }
+
+    const active = Admin.getElectionById(_selectedActiveElectionId) || activeElections[0];
+    const electionSelector = activeElections.length > 1 ? `
+      <div class="card sm mb-md">
+        <label class="form-label" for="active-election-select">Active Election</label>
+        <select id="active-election-select" class="form-input">
+          ${activeElections.map(e => `
+            <option value="${e.id}" ${e.id === active.id ? 'selected' : ''}>
+              ${_esc(e.title)}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+    ` : '';
+
     content.innerHTML = `
       <div id="vote-phase-verify">
         <h3 class="mb-lg">Step 1 — Face Verification</h3>
@@ -332,6 +355,7 @@ const App = (() => {
               <h4 class="mb-md">🗳️ ${_esc(active.title)}</h4>
               <p class="text-secondary text-sm">${active.candidates.length} candidates</p>
             </div>
+            ${electionSelector}
             <div class="card sm mt-md">
               <p class="fw-600 mb-sm">How it works</p>
               <ol style="padding-left:1.2em;color:var(--txt-secondary);font-size:.85rem;line-height:2">
@@ -384,6 +408,11 @@ const App = (() => {
       </div>
     `;
 
+    const select = document.getElementById('active-election-select');
+    if (select) {
+      select.onchange = (event) => App.selectActiveElection(event.target.value);
+    }
+
     // Start camera for verification
     const videoEl = document.getElementById('vote-video');
     startCamera(videoEl).then(ok => {
@@ -424,6 +453,11 @@ const App = (() => {
     if (btn) btn.disabled = false;
   }
 
+  function selectActiveElection(id) {
+    _selectedActiveElectionId = id;
+    renderVoteView();
+  }
+
   // ── Face Verification Flow ──────────────────────────────────────────────────
   let _verifying = false;
   async function runVerification() {
@@ -450,7 +484,10 @@ const App = (() => {
 
       if (result.matched) {
         // Check if already voted
-        const active = Admin.getActiveElection();
+        const active = Admin.getElectionById(_selectedActiveElectionId) || Admin.getActiveElection();
+        if (!active) {
+          throw new Error('No active election selected.');
+        }
         const voterHash = await sha256(result.studentId + active.id);
 
         if (window.VoteChain.hasVoted(voterHash, active.id)) {
@@ -479,6 +516,7 @@ const App = (() => {
           LIVENESS_FAILED:    'Liveness check failed — please blink naturally and try again.',
           NO_FACE_DETECTED:   'No face detected — ensure good lighting and face the camera.',
           FACE_NOT_RECOGNIZED:'Face not recognized — are you registered?',
+          DUPLICATE_FACE_RECORD:'This face is registered under multiple Student IDs. Ask admin to remove duplicate voter records.',
         };
         const msg = reasons[result.reason] || 'Verification failed.';
         showVerifyStatus('error', `✗ ${msg}`);
@@ -521,7 +559,10 @@ const App = (() => {
     showMiningModal(true);
 
     try {
-      const active = Admin.getActiveElection();
+      const active = Admin.getElectionById(_selectedActiveElectionId) || Admin.getActiveElection();
+      if (!active) {
+        throw new Error('No active election selected.');
+      }
       const block  = await window.VoteChain.castVote(
         _verifiedStudent.voterHash,
         _selectedCandidateId,
@@ -650,7 +691,9 @@ const App = (() => {
           <h4>📊 Live Chart</h4>
           <span class="badge badge-muted mono text-xs">Auto-updates</span>
         </div>
-        <canvas id="public-results-chart" height="120"></canvas>
+        <div class="chart-compact">
+          <canvas id="public-results-chart"></canvas>
+        </div>
       </div>
     `;
 
@@ -670,6 +713,7 @@ const App = (() => {
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 20 } },
             tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw} votes` } }
@@ -762,6 +806,7 @@ const App = (() => {
 
     // Landing page blockchain animation
     animateLandingChain();
+    updateHeroStats();
 
     // Nav items
     document.querySelectorAll('.nav-item').forEach(el => {
@@ -780,10 +825,14 @@ const App = (() => {
     setInterval(updateChainStatus, 5000);
 
     // Block mined events
-    window.addEventListener('block:mined', () => updateChainStatus());
+    window.addEventListener('block:mined', () => {
+      updateChainStatus();
+      updateHeroStats();
+    });
     window.addEventListener('fraud:detected', () => {
       const badge = document.getElementById('fraud-nav-badge');
       if (badge) badge.textContent = window.FaceEngine.fraudLog.length;
+      updateHeroStats();
     });
 
     // Show landing
@@ -798,6 +847,21 @@ const App = (() => {
     });
   }
 
+  function updateHeroStats() {
+    const elections = Admin.loadElections ? Admin.loadElections() : [];
+    const totalVotes = elections.reduce((sum, election) => {
+      return sum + window.VoteChain.getTotalVotes(election.id);
+    }, 0);
+
+    _setText('hero-stat-voters', window.FaceEngine.getEnrolledCount());
+    _setText('hero-stat-votes', totalVotes);
+    _setText('hero-stat-blocks', window.VoteChain.length);
+    _setText('hero-stat-fraud', window.FaceEngine.fraudLog.length);
+
+    const latest = window.VoteChain.chain?.[window.VoteChain.chain.length - 1];
+    if (latest?.hash) _setText('hero-chain-hash', `${latest.hash.slice(0, 14)}...`);
+  }
+
   async function updateChainStatus() {
     const statusText = document.getElementById('chain-status-text');
     if (statusText) {
@@ -806,12 +870,17 @@ const App = (() => {
       const dot = document.getElementById('chain-dot');
       if (dot) dot.style.background = result.valid ? 'var(--clr-success)' : 'var(--clr-danger)';
     }
+    updateHeroStats();
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function _esc(str) {
     if (!str) return '';
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function _setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -827,6 +896,7 @@ const App = (() => {
     cancelEnrollment,
     runVerification,
     selectCandidate,
+    selectActiveElection,
     castVote,
     renderPublicResults,
   };
