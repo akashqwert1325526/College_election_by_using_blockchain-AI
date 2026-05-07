@@ -81,6 +81,10 @@ const App = (() => {
       case 'results':
         renderPublicResults();
         break;
+
+      default:
+        console.warn(`[Router] No on_enter handler defined for view: ${viewId}`);
+        break;
     }
   }
 
@@ -263,6 +267,7 @@ const App = (() => {
       const msg = err.message === 'ENROLLMENT_TIMEOUT' ? 'Could not detect face — check lighting.' :
                   err.message === 'ALREADY_ENROLLED'   ? 'Already enrolled.'                        :
                   err.message === 'LIVENESS_FAILED'    ? 'Face verification failed. Please face the camera clearly and try again.' :
+                  err.message === 'MULTIPLE_FACES_DETECTED' ? 'Multiple faces detected. Ensure only one person is in frame.' :
                   err.message === 'FACE_ALREADY_ENROLLED'
                     ? `This face is already registered as ${err.studentId || 'another student'}.` :
                   err.message;
@@ -517,6 +522,7 @@ const App = (() => {
           NO_FACE_DETECTED:   'No face detected — ensure good lighting and face the camera.',
           FACE_NOT_RECOGNIZED:'Face not recognized — are you registered?',
           DUPLICATE_FACE_RECORD:'This face is registered under multiple Student IDs. Ask admin to remove duplicate voter records.',
+          MULTIPLE_FACES_DETECTED: 'Multiple faces detected. Ensure only one person is in frame.',
         };
         const msg = reasons[result.reason] || 'Verification failed.';
         showVerifyStatus('error', `✗ ${msg}`);

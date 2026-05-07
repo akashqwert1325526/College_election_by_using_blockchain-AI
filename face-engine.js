@@ -7,13 +7,13 @@
 
 const FACE_CFG = {
   MODEL_URL: 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights',
-  MATCH_THRESHOLD: 0.6,          // Euclidean distance (lower = stricter)
-  DUPLICATE_FACE_THRESHOLD: 0.72, // Reject another Student ID for the same face
+  MATCH_THRESHOLD: 0.5,           // Euclidean distance (lower = stricter)
+  DUPLICATE_FACE_THRESHOLD: 0.5,  // Reject another Student ID for the same face
   ENROLLMENT_FRAMES: 5,          // How many frames to average for enrollment
   ENROLLMENT_TIMEOUT_MS: 20000,  // Abort enrollment after 20s
   LIVENESS_FRAMES: 4,            // Frames to check for liveness
   LIVENESS_EAR_MIN: 0.15,        // Eye open threshold
-  DETECTION_CONFIDENCE: 0.5,
+  DETECTION_CONFIDENCE: 0.4,     // Slightly lower to detect reliably in dim lighting
 };
 
 // ─── Face Engine ──────────────────────────────────────────────────────────────
@@ -56,12 +56,33 @@ class FaceEngine {
 
   // ── Detect a single face with full info ───────────────────────────────────
   async _detect(videoEl) {
-    return faceapi
-      .detectSingleFace(videoEl, new faceapi.SsdMobilenetv1Options({
+    const dets = await faceapi
+      .detectAllFaces(videoEl, new faceapi.SsdMobilenetv1Options({
         minConfidence: FACE_CFG.DETECTION_CONFIDENCE
       }))
       .withFaceLandmarks()
-      .withFaceDescriptor();
+      .withFaceDescriptors();
+
+    if (!dets || dets.length === 0) return null;
+    if (dets.length === 1) return dets[0];
+
+    // Handle multiple faces by filtering out background noise
+    dets.sort((a, b) => {
+      const areaA = a.detection.box.width * a.detection.box.height;
+      const areaB = b.detection.box.width * b.detection.box.height;
+      return areaB - areaA;
+    });
+
+    const primaryArea = dets[0].detection.box.width * dets[0].detection.box.height;
+    const secondaryArea = dets[1].detection.box.width * dets[1].detection.box.height;
+
+    // If the second face is prominently visible (>25% of the primary face), abort
+    if (secondaryArea > primaryArea * 0.25) {
+      throw new Error('MULTIPLE_FACES_DETECTED');
+    }
+
+    // Safely return the main face, ignoring tiny background noise
+    return dets[0];
   }
 
   // ── Enrollment ─────────────────────────────────────────────────────────────
@@ -95,6 +116,7 @@ class FaceEngine {
         }
       } catch (err) {
         if (err.message === 'FACE_ALREADY_ENROLLED') throw err;
+        if (err.message === 'MULTIPLE_FACES_DETECTED') throw err;
         /* skip bad frame */
       }
 
@@ -126,12 +148,19 @@ class FaceEngine {
     let validFrames = 0;
     for (let i = 0; i < FACE_CFG.LIVENESS_FRAMES; i++) {
       try {
-        const det = await faceapi
-          .detectSingleFace(videoEl, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+        const dets = await faceapi
+          .detectAllFaces(videoEl, new faceapi.SsdMobilenetv1Options({ minConfidence: FACE_CFG.DETECTION_CONFIDENCE }))
           .withFaceLandmarks();
 
-        if (det) {
-          const ear = this._eyeAspectRatio(det.landmarks);
+        if (dets && dets.length > 0) {
+          // Identify the main face for liveness
+          dets.sort((a, b) => {
+            const areaA = a.detection.box.width * a.detection.box.height;
+            const areaB = b.detection.box.width * b.detection.box.height;
+            return areaB - areaA;
+          });
+          
+          const ear = this._eyeAspectRatio(dets[0].landmarks);
           // Eyes should be open (not a printed photo with closed or drawn eyes)
           if (ear >= FACE_CFG.LIVENESS_EAR_MIN) validFrames++;
         }
@@ -153,7 +182,17 @@ class FaceEngine {
     }
 
     // Step 2: Detect
-    const det = await this._detect(videoEl);
+    let det;
+    try {
+      det = await this._detect(videoEl);
+    } catch (err) {
+      if (err.message === 'MULTIPLE_FACES_DETECTED') {
+        this._logFraud(null, null, 'MULTIPLE_FACES_DETECTED');
+        return { matched: false, reason: 'MULTIPLE_FACES_DETECTED', confidence: 0 };
+      }
+      throw err;
+    }
+
     if (!det) {
       return { matched: false, reason: 'NO_FACE_DETECTED', confidence: 0 };
     }
