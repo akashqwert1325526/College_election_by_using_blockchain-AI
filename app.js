@@ -41,6 +41,10 @@ const App = (() => {
 
   function on_enter(viewId, opts) {
     switch (viewId) {
+      case 'landing':
+        renderLandingView();
+        break;
+
       case 'admin-login':
         Admin.bindLoginForm();
         break;
@@ -87,6 +91,198 @@ const App = (() => {
         break;
     }
   }
+
+  // ── Landing View ─────────────────────────────────────────────────────────────
+  function renderLandingView() {
+    const view = document.getElementById('view-landing');
+    if (!view) return;
+
+    view.innerHTML = `
+      <div class="homepage-container">
+        <!-- HERO SECTION -->
+        <div class="hero-split">
+          <div class="hero-left">
+            <h1 class="gradient-text">Secure Digital Voting</h1>
+            <h2 style="color:var(--t1); font-size:1.8rem; margin-bottom:var(--s-4);">Powered by Blockchain & AI Verification</h2>
+            <p class="text-secondary mb-xl" style="font-size:1.15rem; max-width:540px;">
+              Tamper-proof college elections with facial authentication, encrypted voting, and real-time auditing.
+            </p>
+            <div class="hero-actions mb-xl">
+              <button class="btn btn-primary btn-lg" onclick="App.navigate('vote')">Start Voting</button>
+              <button class="btn btn-outline btn-lg" onclick="App.navigate('results')">View Live Results</button>
+            </div>
+            <div class="trust-badges flex gap-sm flex-wrap text-sm text-muted">
+              <span><span class="text-success">✓</span> Face Verification</span>
+              <span><span class="text-success">✓</span> Immutable Blockchain</span>
+              <span><span class="text-success">✓</span> Real-time Audit Logs</span>
+              <span><span class="text-success">✓</span> Fraud Detection AI</span>
+            </div>
+          </div>
+          <div class="hero-right">
+            <div class="cube-container">
+              <div class="cube">
+                <div class="face front"></div>
+                <div class="face back"></div>
+                <div class="face right"></div>
+                <div class="face left"></div>
+                <div class="face top"></div>
+                <div class="face bottom"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATS SECTION -->
+        <div class="stats-row mt-xl">
+          <div class="stat-card glow">
+            <div class="stat-icon">🧑‍🎓</div>
+            <div class="stat-value" id="hero-stat-voters">0</div>
+            <div class="stat-label">Total Voters</div>
+          </div>
+          <div class="stat-card glow" style="--stat-color:var(--cyan)">
+            <div class="stat-icon">🗳️</div>
+            <div class="stat-value" id="hero-stat-votes">0</div>
+            <div class="stat-label">Votes Cast</div>
+          </div>
+          <div class="stat-card glow" style="--stat-color:var(--green)">
+            <div class="stat-icon">⛓️</div>
+            <div class="stat-value" id="hero-stat-blocks">0</div>
+            <div class="stat-label">Blocks Mined</div>
+          </div>
+          <div class="stat-card glow" style="--stat-color:var(--red)">
+            <div class="stat-icon">🛡️</div>
+            <div class="stat-value" id="hero-stat-fraud">0</div>
+            <div class="stat-label">Fraud Prevented</div>
+          </div>
+        </div>
+
+        <!-- FEATURES GRID -->
+        <div class="features-section mt-xl pt-xl">
+          <h2 class="text-center mb-xl">Why SecureVote?</h2>
+          <div class="features-grid">
+            <div class="feature-card">
+              <div class="feature-icon violet">👁️</div>
+              <h4>AI Face Recognition</h4>
+              <p class="text-xs text-secondary">Advanced liveness detection and biometric matching.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon cyan">⛓️</div>
+              <h4>Blockchain Security</h4>
+              <p class="text-xs text-secondary">SHA-256 encrypted, decentralized, and immutable ledger.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon green">⚡</div>
+              <h4>Real-time Counting</h4>
+              <p class="text-xs text-secondary">Results are tallied instantly as blocks are mined.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon red">🛑</div>
+              <h4>Fraud Prevention</h4>
+              <p class="text-xs text-secondary">One face, one vote. Impersonation is mathematically impossible.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon blue">🕵️</div>
+              <h4>Anonymous Voting</h4>
+              <p class="text-xs text-secondary">Cryptographic hashes decouple your identity from your ballot.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon amber">📊</div>
+              <h4>Election Analytics</h4>
+              <p class="text-xs text-secondary">Live transparent data on turnout and candidate performance.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- LIVE ACTIVITY & RESULTS PREVIEW -->
+        <div class="grid-2 mt-xl pt-xl pb-xl">
+          <div class="activity-feed-container card glow">
+            <h4 class="mb-md flex items-center gap-sm"><span class="chain-dot pulse"></span> Live Network Activity</h4>
+            <div class="activity-feed terminal-style" id="home-activity-feed">
+              <div class="feed-item"><span class="feed-time">[System]</span> Blockchain initialized</div>
+            </div>
+          </div>
+          
+          <div class="results-preview-container card">
+            <h4 class="mb-md">Active Election Preview</h4>
+            <div class="chart-compact" style="height: 200px;">
+               <canvas id="home-results-preview-chart"></canvas>
+            </div>
+            <button class="btn btn-outline btn-full mt-md" onclick="App.navigate('results')">View Full Results</button>
+          </div>
+        </div>
+
+      </div>
+    `;
+    
+    updateHeroStats();
+    renderHomeChartPreview();
+  }
+
+  function renderHomeChartPreview() {
+    const ctx = document.getElementById('home-results-preview-chart');
+    if (!ctx || !window.Chart) return;
+
+    const elections = Admin.loadElections ? Admin.loadElections() : [];
+    const active = elections.find(e => e.status === 'active') || elections[elections.length - 1];
+
+    if (!active) {
+      ctx.parentElement.innerHTML = '<p class="text-secondary text-sm text-center mt-xl">No active elections.</p>';
+      return;
+    }
+
+    const tally = window.VoteChain.getResults(active.id);
+    const colors = ['rgba(139,92,246,0.9)','rgba(0,217,255,0.85)','rgba(16,185,129,0.85)','rgba(245,158,11,0.85)'];
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: active.candidates.map(c => c.name.split(' ')[0]), // short names
+        datasets: [{
+          label: 'Votes',
+          data: active.candidates.map(c => tally[c.id] || 0),
+          backgroundColor: colors.slice(0, active.candidates.length),
+          borderWidth: 0,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { precision:0, color:'#94a3b8' } },
+          x: { grid: { display: false }, ticks: { color:'#94a3b8' } }
+        }
+      }
+    });
+  }
+
+  function addActivityLog(msg) {
+    const feed = document.getElementById('home-activity-feed');
+    if (!feed) return;
+    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+    const div = document.createElement('div');
+    div.className = 'feed-item';
+    div.innerHTML = `<span class="feed-time">[${time}]</span> ${msg}`;
+    feed.prepend(div);
+    if (feed.children.length > 8) feed.removeChild(feed.lastChild);
+  }
+
+  // Simulate some background network activity to make the feed feel "live"
+  setInterval(() => {
+    if (_currentView === 'landing' && document.getElementById('home-activity-feed')) {
+      const msgs = [
+        "Network node synced",
+        "Verifying peer connections...",
+        "Consensus check passed",
+        "Awaiting new transactions...",
+        "Memppool status: optimal"
+      ];
+      if (Math.random() > 0.7) {
+        addActivityLog(msgs[Math.floor(Math.random() * msgs.length)]);
+      }
+    }
+  }, 3500);
 
   // ── Camera Utilities ────────────────────────────────────────────────────────
   async function startCamera(videoEl, opts = {}) {
@@ -359,6 +555,7 @@ const App = (() => {
             <div class="card sm">
               <h4 class="mb-md">🗳️ ${_esc(active.title)}</h4>
               <p class="text-secondary text-sm">${active.candidates.length} candidates</p>
+              ${active.endTime ? `<p class="text-xs text-muted mt-sm">Ends: ${new Date(active.endTime).toLocaleString()}</p>` : ''}
             </div>
             ${electionSelector}
             <div class="card sm mt-md">
@@ -489,9 +686,10 @@ const App = (() => {
 
       if (result.matched) {
         // Check if already voted
+        if (Admin.updateElectionStatuses) Admin.updateElectionStatuses();
         const active = Admin.getElectionById(_selectedActiveElectionId) || Admin.getActiveElection();
-        if (!active) {
-          throw new Error('No active election selected.');
+        if (!active || active.status !== 'active') {
+          throw new Error('This election is no longer active.');
         }
         const voterHash = await sha256(result.studentId + active.id);
 
@@ -565,9 +763,10 @@ const App = (() => {
     showMiningModal(true);
 
     try {
+      if (Admin.updateElectionStatuses) Admin.updateElectionStatuses();
       const active = Admin.getElectionById(_selectedActiveElectionId) || Admin.getActiveElection();
-      if (!active) {
-        throw new Error('No active election selected.');
+      if (!active || active.status !== 'active') {
+        throw new Error('This election is no longer active.');
       }
       const block  = await window.VoteChain.castVote(
         _verifiedStudent.voterHash,
@@ -826,6 +1025,11 @@ const App = (() => {
     document.getElementById('hamburger-btn')?.addEventListener('click', openSidebar);
     document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
 
+    // Desktop Sidebar Toggle
+    document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
+      document.getElementById('sidebar')?.classList.toggle('collapsed');
+    });
+
     // Chain status
     updateChainStatus();
     setInterval(updateChainStatus, 5000);
@@ -905,6 +1109,22 @@ const App = (() => {
     selectActiveElection,
     castVote,
     renderPublicResults,
+    connectWallet: () => {
+      const btn = document.getElementById('connect-wallet-btn');
+      if (btn.textContent === 'Connect Wallet') {
+        const fakeAddress = '0x' + Math.random().toString(16).substring(2, 10).toUpperCase() + '...' + Math.random().toString(16).substring(2, 6).toUpperCase();
+        btn.textContent = fakeAddress;
+        toast('Wallet Connected', `Connected to ${fakeAddress}`, 'success');
+      } else {
+        btn.textContent = 'Connect Wallet';
+        toast('Wallet Disconnected', 'Your wallet has been disconnected.', 'info');
+      }
+    },
+    toggleTheme: () => {
+      document.body.classList.toggle('light-theme');
+      const isLight = document.body.classList.contains('light-theme');
+      toast('Theme Changed', isLight ? 'Switched to Light Mode' : 'Switched to Dark Mode', 'info');
+    }
   };
 })();
 

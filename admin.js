@@ -22,7 +22,31 @@ const Admin = (() => {
   function saveElections(elections) {
     localStorage.setItem(ELECTIONS_KEY, JSON.stringify(elections));
   }
+
+  function updateElectionStatuses() {
+    const elections = loadElections();
+    let changed = false;
+    const now = new Date().getTime();
+
+    elections.forEach(e => {
+      const started = e.startTime ? new Date(e.startTime).getTime() <= now : false;
+      const ended = e.endTime ? new Date(e.endTime).getTime() <= now : false;
+
+      if (e.status === 'upcoming' && started && !ended) {
+        e.status = 'active';
+        e.activatedAt = new Date().toISOString();
+        changed = true;
+      } else if (e.status !== 'ended' && ended) {
+        e.status = 'ended';
+        e.endedAt = new Date().toISOString();
+        changed = true;
+      }
+    });
+    if (changed) saveElections(elections);
+  }
+
   function getActiveElections() {
+    updateElectionStatuses();
     return loadElections().filter(e => e.status === 'active');
   }
   function getActiveElection() {
@@ -113,6 +137,7 @@ const Admin = (() => {
   function renderElectionsList() {
     const container = document.getElementById('elections-list');
     if (!container) return;
+    updateElectionStatuses();
     const elections = loadElections();
 
     if (!elections.length) {
@@ -145,6 +170,11 @@ const Admin = (() => {
               ${e.candidates.length} candidates &nbsp;|&nbsp;
               ${votes} vote${votes !== 1 ? 's' : ''}
             </div>
+            ${e.startTime || e.endTime ? `<div class="text-xs text-muted mt-sm">
+              ${e.startTime ? `Starts: ${new Date(e.startTime).toLocaleString()}` : ''}
+              ${e.startTime && e.endTime ? ' &nbsp;|&nbsp; ' : ''}
+              ${e.endTime ? `Ends: ${new Date(e.endTime).toLocaleString()}` : ''}
+            </div>` : ''}
           </div>
           <div class="flex gap-sm">
             ${e.status !== 'active' ? `<button class="btn btn-success btn-sm" onclick="Admin.activateElection('${e.id}')">Activate</button>` : `<button class="btn btn-danger btn-sm" onclick="Admin.endElection('${e.id}')">End</button>`}
@@ -165,6 +195,33 @@ const Admin = (() => {
 
     document.getElementById('election-modal-title').textContent = edit ? 'Edit Election' : 'Create Election';
     document.getElementById('election-title-input').value  = edit ? edit.title : '';
+
+    let startInput = document.getElementById('election-start-input');
+    let endInput = document.getElementById('election-end-input');
+
+    if (!startInput) {
+      const titleGroup = document.getElementById('election-title-input').closest('.form-group');
+      if (titleGroup) {
+        const timeGrid = document.createElement('div');
+        timeGrid.className = 'grid-2 mt-md mb-md';
+        timeGrid.innerHTML = `
+          <div class="form-group mb-0">
+            <label class="form-label" for="election-start-input">Start Time (Optional)</label>
+            <input type="datetime-local" id="election-start-input" class="form-input" />
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label" for="election-end-input">End Time (Optional)</label>
+            <input type="datetime-local" id="election-end-input" class="form-input" />
+          </div>
+        `;
+        titleGroup.insertAdjacentElement('afterend', timeGrid);
+        startInput = document.getElementById('election-start-input');
+        endInput = document.getElementById('election-end-input');
+      }
+    }
+
+    if (startInput) startInput.value = edit && edit.startTime ? edit.startTime : '';
+    if (endInput) endInput.value = edit && edit.endTime ? edit.endTime : '';
 
     // Clear & repopulate candidates
     const cList = document.getElementById('candidates-list-input');
@@ -192,6 +249,15 @@ const Admin = (() => {
     const title = document.getElementById('election-title-input').value.trim();
     if (!title) { App.toast('Error', 'Election title is required.', 'error'); return; }
 
+    const startInput = document.getElementById('election-start-input');
+    const endInput = document.getElementById('election-end-input');
+    const startTime = startInput && startInput.value ? startInput.value : null;
+    const endTime = endInput && endInput.value ? endInput.value : null;
+
+    if (startTime && endTime && new Date(startTime) >= new Date(endTime)) {
+      App.toast('Error', 'End time must be after start time.', 'error'); return;
+    }
+
     const rows = document.querySelectorAll('#candidates-list-input > div');
     const candidates = [];
     rows.forEach(row => {
@@ -206,18 +272,26 @@ const Admin = (() => {
 
     if (editId) {
       const idx = elections.findIndex(e => e.id === editId);
-      if (idx !== -1) { elections[idx].title = title; elections[idx].candidates = candidates; }
+      if (idx !== -1) {
+        elections[idx].title = title;
+        elections[idx].candidates = candidates;
+        elections[idx].startTime = startTime;
+        elections[idx].endTime = endTime;
+      }
     } else {
       elections.push({
         id: _genId(),
         title,
         candidates,
+        startTime,
+        endTime,
         status: 'upcoming',
         createdAt: new Date().toISOString(),
       });
     }
 
     saveElections(elections);
+    updateElectionStatuses();
     closeElectionModal();
     renderElectionsList();
     App.toast('Saved', 'Election saved successfully.', 'success');
@@ -536,14 +610,36 @@ const Admin = (() => {
     const active = getActiveElection();
     if (!active) { App.toast('No active election', 'Nothing to export.', 'warning'); return; }
     const tally  = window.VoteChain.getResults(active.id);
-    const blocks = window.VoteChain.getVoteBlocks(active.id);
-    const data   = { election: active, tally, blocks, exportedAt: new Date().toISOString() };
-    const blob   = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `election-results-${active.id.slice(0,8)}.json`;
-    a.click();
-    App.toast('Exported', 'Results downloaded as JSON.', 'success');
+    
+    if (!window.jspdf) {
+      App.toast('Error', 'PDF library not loaded.', 'error');
+      return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    doc.setFontSize(18);
+    doc.text('Election Results Report', 14, 22);
+
+    doc.setFontSize(12);
+    doc.text(`Title: ${active.title}`, 14, 32);
+    doc.text(`Status: ${active.status}`, 14, 40);
+    doc.text(`Exported at: ${new Date().toLocaleString()}`, 14, 48);
+
+    const tableData = active.candidates.map(c => [
+      c.name,
+      c.party || 'Independent',
+      tally[c.id] || 0
+    ]);
+
+    doc.autoTable({
+      startY: 55,
+      head: [['Candidate Name', 'Party', 'Votes']],
+      body: tableData,
+    });
+
+    doc.save(`election-results-${active.id.slice(0,8)}.pdf`);
+    App.toast('Exported', 'Results downloaded as PDF.', 'success');
   }
 
   // ── System Reset ───────────────────────────────────────────────────────────
@@ -615,6 +711,7 @@ const Admin = (() => {
     getActiveElection,
     getElectionById,
     loadElections,
+    updateElectionStatuses,
   };
 })();
 
